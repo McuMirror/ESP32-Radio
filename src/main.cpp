@@ -234,7 +234,9 @@ static uint32_t gSettingsDirtyMs = 0;
 static uint32_t gNonceSaved      = 0;
 
 // VOX
-static uint32_t gLastVoiceMs = 0;
+static uint32_t gLastVoiceMs   = 0;
+static uint32_t gVoxNoiseFloor = 300;   // tracked ambient mic energy (EMA while idle)
+static uint8_t  gVoxAttack     = 0;     // consecutive loud frames before keying
 
 // channel scan (task_ui only)
 static uint8_t  gScanCh         = 0;
@@ -893,6 +895,9 @@ static void radio_set_tx(bool tx) {
 static void request_tx_state() {
     bool desired = (gPttHeld.load() || gVoxActive.load()) && !gTotLatched.load();
     if (desired == gTransmitting.load()) return;
+    Serial.printf("[TX] %s  (ptt=%d vox=%d tot=%d)\n",
+                  desired ? "ON" : "OFF",
+                  gPttHeld.load(), gVoxActive.load(), gTotLatched.load());
     xSemaphoreTake(radioMutex, portMAX_DELAY);
     if (desired != gTransmitting.load()) {
         gTransmitting.store(desired);
@@ -1140,15 +1145,34 @@ static void task_capture(void *) {
         remove_dc_offset(pcmBuf, samples);
         apply_highpass(pcmBuf, samples);
 
-        // VOX: decide TX state from clean (pre-AGC) mic energy
+        // VOX: decide TX state from clean (pre-AGC) mic energy.
+        // Open threshold adapts to the background level so a noisy supply (e.g. USB)
+        // raises the bar instead of false-keying; voice must clear both an absolute
+        // floor and a multiple of the recently-measured noise floor, for a few frames.
         if (gVoxEnable.load() && !gPttHeld.load()) {
-            uint32_t e = pcm_energy(pcmBuf, samples);
-            if (e >= VOX_OPEN_ENERGY) {
+            uint32_t e          = pcm_energy(pcmBuf, samples);
+            uint32_t openThresh = gVoxNoiseFloor * VOX_NOISE_RATIO;
+            if (openThresh < VOX_OPEN_ENERGY) openThresh = VOX_OPEN_ENERGY;
+
+            if (e >= openThresh) {
                 gLastVoiceMs = millis();
-                if (!gVoxActive.load()) { gVoxActive.store(true); request_tx_state(); }
-            } else if (gVoxActive.load() && (millis() - gLastVoiceMs) >= VOX_HANG_MS) {
-                gVoxActive.store(false);
-                request_tx_state();
+                if (gVoxAttack < VOX_ATTACK_FRAMES) gVoxAttack++;
+                if (gVoxAttack >= VOX_ATTACK_FRAMES && !gVoxActive.load()) {
+                    gVoxActive.store(true);
+                    request_tx_state();
+                }
+            } else {
+                gVoxAttack = 0;
+                if (gVoxActive.load()) {
+                    if ((millis() - gLastVoiceMs) >= VOX_HANG_MS) {
+                        gVoxActive.store(false);
+                        request_tx_state();
+                    }
+                } else {
+                    // Idle and quiet: slowly track the ambient noise floor (EMA, 1/8 weight).
+                    if (e > gVoxNoiseFloor) gVoxNoiseFloor += (e - gVoxNoiseFloor) >> 3;
+                    else                    gVoxNoiseFloor -= (gVoxNoiseFloor - e) >> 3;
+                }
             }
         }
 
@@ -1385,12 +1409,19 @@ static void task_playback(void *) {
 static void task_ui(void *) {
     uint32_t lastBat     = 0;
     uint32_t lastDisplay = 0;
+    bool     pttArmed    = false;   // ignore PTT until the pin reads released once
 
     while (true) {
         uint32_t now = millis();
 
         // ---- PTT (physical) ----
+        // Defensive: don't honor PTT until the pin reads released (HIGH) at least once,
+        // so a button held during boot (or a pin held low externally) can't key TX.
         bool ptt = (digitalRead(BTN_PTT_PIN) == LOW);
+        if (!pttArmed) {
+            if (!ptt) pttArmed = true;
+            ptt = false;
+        }
         if (ptt != gPttHeld.load()) {
             gPttHeld.store(ptt);
             gLastActivity = now;
@@ -1403,6 +1434,9 @@ static void task_ui(void *) {
         if (TOT_MS > 0 && gTransmitting.load() && !gTotLatched.load() &&
             (now - gTxStartMs.load()) >= TOT_MS) {
             gTotLatched.store(true);
+            Serial.printf("[TOT] timeout after %lu ms TX (ptt=%d vox=%d)\n",
+                          (unsigned long)(now - gTxStartMs.load()),
+                          gPttHeld.load(), gVoxActive.load());
             request_tx_state();           // forces RX
             gDisplayDirty = true;
         }

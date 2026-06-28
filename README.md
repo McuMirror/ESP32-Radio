@@ -85,9 +85,9 @@ All buttons are active LOW (connect to GND when pressed).
 |--------|-----------|----------|
 | UP | GPIO 13 | Navigate up / Increase value |
 | DOWN | GPIO 12 | Navigate down / Decrease value |
-| BACK | GPIO 15 | Go back / Exit menu |
-| SELECT | GPIO 2 | Enter menu / Confirm selection |
-| PTT | GPIO 0 | Push-to-Talk (hold to transmit) |
+| BACK | GPIO 2 | Go back / Exit menu |
+| SELECT | GPIO 15 | Enter menu / Confirm selection |
+| PTT | GPIO 16 | Push-to-Talk (hold to transmit) |
 
 ### Battery Monitoring
 
@@ -246,10 +246,11 @@ plain builds.
 
 ## Hardware notes
 
-- **Strapping pins**: `BTN_PTT` is on **GPIO0** and `BTN_SELECT` is on **GPIO2** — both
-  are ESP32 boot-strapping pins. Holding **PTT** (or SELECT) while powering on can put
-  the chip into download mode instead of booting. This cannot be fixed in firmware; if
-  you respin the PCB, move PTT/SELECT to non-strapping GPIOs (e.g. 16/17).
+- **Strapping pins**: `BTN_BACK` is on **GPIO2**, an ESP32 boot-strapping pin — holding
+  **BACK** while powering on can change boot behaviour. `BTN_PTT` was moved off **GPIO0**
+  (the BOOT button, which is tied to the USB auto-reset line and can be held low by a
+  tethered serial port, false-keying TX) to **GPIO16**. If you respin the PCB, also move
+  BACK to a non-strapping GPIO (e.g. 17).
 - **NRF24L01 power**: the PA/LNA modules draw large current spikes. Use a solid 3.3 V
   supply with a 10–100 µF cap across the module's VCC/GND, or you'll see brown-out
   resets and corrupt packets. Lower `NRF_PA_LEVEL` if your rail is weak.
@@ -268,7 +269,7 @@ plain builds.
 - Check power supply (NRF24L01 needs stable 3.3V)
 
 ### Won't Boot / Stuck in Download Mode
-- Don't hold **PTT** (GPIO0) while powering on — it's a strapping pin (see [Hardware notes](#hardware-notes))
+- Don't hold **BACK** (GPIO2) while powering on — it's a strapping pin (see [Hardware notes](#hardware-notes))
 
 ### Display Not Working
 - Verify I2C connections (SDA, SCL)

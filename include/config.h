@@ -12,11 +12,11 @@
 #define FW_NAME             "ESP32 WT"
 
 // ---- Pin map ---------------------------------------------------------------
-// NOTE (hardware): BTN_PTT (GPIO0) and BTN_SELECT (GPIO2) are ESP32 boot
-// strapping pins. Holding PTT or SELECT while powering on can put the chip in
-// download mode or change boot behaviour. This is a board-level issue that
-// cannot be fixed in firmware — if you respin the PCB, move PTT/SELECT to
-// non-strapping GPIOs. See README "Hardware notes".
+// NOTE (hardware): BTN_BACK (GPIO2) is an ESP32 boot strapping pin. Holding BACK
+// while powering on can change boot behaviour. PTT was moved off GPIO0 (BOOT
+// button / USB auto-reset line) to GPIO16 so a tethered USB port can no longer
+// hold it low and false-key TX. If you respin the PCB, also move BACK to a
+// non-strapping GPIO. See README "Hardware notes".
 
 #define NRF_CE_PIN          4
 #define NRF_CSN_PIN         5
@@ -38,9 +38,9 @@
 
 #define BTN_UP_PIN          13
 #define BTN_DOWN_PIN        12
-#define BTN_BACK_PIN        15
-#define BTN_SELECT_PIN      2
-#define BTN_PTT_PIN         0
+#define BTN_BACK_PIN        2
+#define BTN_SELECT_PIN      15
+#define BTN_PTT_PIN         16
 
 #define BAT_ADC_PIN         34
 #define BAT_R1              100000.0f
@@ -117,7 +117,9 @@ static const uint8_t RADIO_KEY[32] = {
 // Off by default. WARNING: with an open speaker this is feedback-prone; VOX is
 // best with a headset. Energy is mean-square/256 of mic PCM (matches noise gate).
 #define VOX_ENABLE_DEFAULT  false
-#define VOX_OPEN_ENERGY     600     // mic energy to start transmitting
+#define VOX_OPEN_ENERGY     2500    // absolute mic-energy floor to start TX (mean-square/256)
+#define VOX_NOISE_RATIO     4       // ...and must also exceed the tracked noise floor by this factor
+#define VOX_ATTACK_FRAMES   3       // require this many consecutive loud frames (~47 ms) before keying
 #define VOX_HANG_MS         800     // keep transmitting this long after voice stops
 
 // ---- TX timeout (anti-stuck-PTT / channel hog) -----------------------------
