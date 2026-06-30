@@ -64,7 +64,7 @@ static inline void chacha20_block(const uint8_t key[32], uint32_t counter,
     }
 }
 
-// XOR a small (<=64 byte) buffer in place with the keystream selected by
+// XORbn a small (<=64 byte) buffer in place with the keystream selected by
 // (key, packetNonce, channel). Symmetric: same call encrypts and decrypts.
 static inline void crypto_xor(const uint8_t key[32], uint32_t packetNonce,
                               uint8_t channel, uint8_t *data, uint8_t len) {

@@ -1154,7 +1154,7 @@ static void handle_menu_buttons() {
                 change_channel(-1);
                 break;
             case MENU_SOUNDTEST:
-                if ((uint8_t)gVolume > VOLUME_MIN) { gVolume--; settings_mark_dirty(); gDisplayDirty = true; }
+            if ((uint8_t)gVolume > VOLUME_MIN) { gVolume--; settings_mark_dirty(); gDisplayDirty = true; }
                 break;
             default: break;
         }
@@ -1622,7 +1622,6 @@ void setup() {
     Wire.begin(OLED_SDA_PIN, OLED_SCL_PIN);
     Wire.setClock(400000);
     display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR);
-    draw_splash_screen();
 
     settings_load();
     radio_init();
@@ -1638,6 +1637,8 @@ void setup() {
     gSignalWindowStart = millis();
     gLastActivity      = millis();
     gJbLastAdjust      = millis();
+
+    draw_main_screen();   // show channel/TX/RX screen immediately on boot
 
     txQueue       = xQueueCreate(TX_RING_PKTS, sizeof(TxPacket));
     rxQueue       = xQueueCreate(RX_RING_PKTS, sizeof(RxFrame));
@@ -1656,7 +1657,6 @@ void setup() {
     xTaskCreatePinnedToCore(task_playback, "play", 3072, nullptr, 4, nullptr, 0);
     xTaskCreatePinnedToCore(task_ui,       "ui",   4096, nullptr, 2, nullptr, 0);
 
-    vTaskDelay(pdMS_TO_TICKS(800));   // let the splash linger briefly
     gDisplayDirty = true;
 }
 
